@@ -1,6 +1,4 @@
 <?php
-//siddharth : 2025-12-12 commented out cronjob and stop the script becasue too many requests were being made to the API
-exit(0);
 set_time_limit(60*50);
 
 ini_set("error_reporting", "true");
@@ -42,7 +40,7 @@ if ($psw['last_city_id'] >= ($last_city_id_from_db[0]['id'] - 1)) {
 }else{
     $psw['last_city_id'] = (int) $psw['last_city_id'] + 1;
 }
-//$psw['last_city_id'] = 0;
+// $psw['last_city_id'] = 0;
 echo "-------> last citie id is -> {$psw['last_city_id']} \n";
 $cities = get_cities($psw['last_city_id']);
 print_debug("Cities", count($cities), 1);
@@ -55,215 +53,245 @@ $script_start_time = time();
 while (true) {
     try {
         if(time() > $script_start_time + MAX_LIFE) throw new Exception("I am too old, killing myself :(", 1);
+        $location_array = [
+            ['id' => 1, 'lat' => 50.0000000000, 'long' => -5.5000000000],
+            ['id' => 2, 'lat' => 50.5000000000, 'long' => -4.0000000000],
+            ['id' => 3, 'lat' => 50.8000000000, 'long' => -2.0000000000],
+            ['id' => 4, 'lat' => 51.1000000000, 'long' => 0.5000000000],
+            ['id' => 5, 'lat' => 51.7000000000, 'long' => -4.0000000000],
+            ['id' => 6, 'lat' => 52.0000000000, 'long' => -2.0000000000],
+            ['id' => 7, 'lat' => 52.5000000000, 'long' => 1.0000000000],
+            ['id' => 8, 'lat' => 53.0000000000, 'long' => -4.0000000000],
+            ['id' => 9, 'lat' => 53.3000000000, 'long' => -2.3000000000],
+            ['id' => 10, 'lat' => 53.7000000000, 'long' => -0.5000000000],
+            ['id' => 11, 'lat' => 54.6000000000, 'long' => -6.5000000000],
+            ['id' => 12, 'lat' => 54.8000000000, 'long' => -2.5000000000],
+            ['id' => 13, 'lat' => 55.5000000000, 'long' => -4.5000000000],
+            ['id' => 14, 'lat' => 56.2000000000, 'long' => -3.5000000000],
+            ['id' => 15, 'lat' => 57.2000000000, 'long' => -3.0000000000],
+            ['id' => 16, 'lat' => 57.5000000000, 'long' => -6.5000000000],
+            ['id' => 17, 'lat' => 58.5000000000, 'long' => -4.0000000000],
+            ['id' => 18, 'lat' => 60.3000000000, 'long' => -1.3000000000]
+        ];
+        foreach ($location_array as $index => $location) {
+            if(time() > $script_start_time + MAX_LIFE) throw new Exception("I am too old, killing myself :(", 1);
+            print_debug("Processing", $city['city'] . ", " . $city['region_code'] . ", " . $city['country'], 1);
 
-    $location_array = [
-        ['lat' => 50.0000000000, 'long' => -5.5000000000],
-        ['lat' => 50.5000000000, 'long' => -4.0000000000],
-        ['lat' => 50.8000000000, 'long' => -2.0000000000],
-        ['lat' => 51.1000000000, 'long' => 0.5000000000],
-        ['lat' => 51.7000000000, 'long' => -4.0000000000],
-        ['lat' => 52.0000000000, 'long' => -2.0000000000],
-        ['lat' => 52.5000000000, 'long' => 1.0000000000],
-        ['lat' => 53.0000000000, 'long' => -4.0000000000],
-        ['lat' => 53.3000000000, 'long' => -2.3000000000],
-        ['lat' => 53.7000000000, 'long' => -0.5000000000],
-        ['lat' => 54.6000000000, 'long' => -6.5000000000],
-        ['lat' => 54.8000000000, 'long' => -2.5000000000],
-        ['lat' => 55.5000000000, 'long' => -4.5000000000],
-        ['lat' => 56.2000000000, 'long' => -3.5000000000],
-        ['lat' => 57.2000000000, 'long' => -3.0000000000],
-        ['lat' => 57.5000000000, 'long' => -6.5000000000],
-        ['lat' => 58.5000000000, 'long' => -4.0000000000],
-        ['lat' => 60.3000000000, 'long' => -1.3000000000]
-    ];
-
-    foreach ($location_array as $index => $location) {
-
-        if (time() > $script_start_time + MAX_LIFE) {
-            throw new Exception("I am too old, killing myself :(", 1);
-        }
-
-        print_debug(
-            "Processing Location",
-            "Lat: {$location['lat']}, Long: {$location['long']}",
-            1
-        );
-
-        $params = array(
-            'latitude'  => $location['lat'],
-            'longitude' => $location['long'],
-            'radius'    => 100,
-            'offset'    => 0,
-            'description' => 1,
-            'api_key'   => $api_config['token'],
-            'limit'     => 100
-        );
-
-        // Resume support
-        if (
-            isset($psw['last_location_index']) &&
-            (int)$psw['last_location_index'] === (int)$index
-        ) {
-            $params['offset'] = $psw['last_offset'];
-        }
-
-        $psw['last_location_index'] = $index;
-
-        while (true) {
-
-            $result = fetch_events_from_skiddle($params);
-            $psw['last_offset'] = $params['offset'];
-            Configurations::set_value("skiddle.psw", json_encode($psw));
-
-            if (!isset($success_calls[date("H")])) {
-                $success_calls[date("H")] = 0;
-            }
-            $success_calls[date("H")]++;
-
-            $events = $result['events'];
-
-            print_debug(
-                "Lat {$location['lat']} / Long {$location['long']} (Offset {$params['offset']})",
-                count($events),
-                1
+            $params = array(
+                'latitude' => $location['lat'],
+                'longitude' => $location['long'],
+                'radius' => 100,
+                'offset' => 0,
+                'description' => 1,
+                /*'ticketsavailable' => 1,*/
+                'api_key' => $api_config['token'],
+                'limit' => 100
             );
+            if((int)$psw['last_city_id'] == (int)$location['id'])
+                $params['offset'] = $psw['last_offset'];
 
-            if (is_array($events) && count($events) > 0) {
+            $psw['last_city_id'] = $location['id'];
 
-                foreach ($events as $obj) {
+            while (true) {
 
-                    $event = decode_skiddle_event($obj, $affiliate);
-                    $event_id = $event['event_id'];
-                    $action = detect_action($event_id, $event);
+                $result = fetch_events_from_skiddle($params); $psw['last_offset'] = $params['offset'];
+                Configurations::set_value("skiddle.psw", json_encode($psw));
+                if(!isset($success_calls[date("H", time())])) $success_calls[date("H", time())] = 0;
+                $success_calls[date("H", time())]++;
 
-                    if ($action == DB::INSERT) {
+                $events = $result['events'];
 
-                        if (
-                            $event['params']['postponed'] == 1 ||
-                            $event['params']['cancelled'] == 1
-                        ) {
-                            print_debug(
-                                'Skipped - not inserted',
-                                json_encode($event['params'], true),
-                                1,
-                                "red"
-                            );
-                            continue;
+                print_debug("{$city['city']} ({$params['offset']})", count($events), 1);
+                if(is_array($events) && count($events) > 0) {
+                    foreach ($events as $obj) {
+                        // echo json_encode($obj);
+                        /*print_r($obj);
+                        exit(0);*/
+                        $event = decode_skiddle_event($obj, $affiliate);
+                        // print_debug("Event", $event, 1);
+                        $event_id = $event['event_id'];
+
+                        $action = detect_action($event_id, $event);
+
+                        if ($action == DB::INSERT) {
+                            if ($event['params']['postponed'] == 1 || $event['params']['cancelled'] == 1) {
+                                print_debug('Skipped - not inserted', "->>" . json_encode($event['params'], true), 1, "red");
+                                continue;
+                            }
+                            // if($event['thumb_url'] != 'https://cdn.allevents.in/old/default_thumb.png') {
+                            //     $image_cdn = Functions::download_image_to_cdn($event['thumb_url'], array('w' => 300, 'h' => 300));
+                            //     if($image_cdn) {
+                            //         $event['thumb_url'] = $image_cdn['cdn'];
+                            //     }
+                            // }
+
+                            $insertID = Event::insert_event_cron($event);
+                            if($insertID > 0) {
+                                if ($event['banner_url']) {
+                                   Event::update_event_banner_cron($event);
+                                }
+                                sleep(2);
+                                $updated_event_obj = ($event['params']) ? $event['params']:array();
+                                $updated_event_obj['last_updated_from_source'] = time();
+                                update_ext_event_params($event_id, $updated_event_obj);
+                                //if($event['ticket_url'] != '')
+                                  //  Event::update_event_params($event_id, array("redir_url"=> $event['ticket_url']));
+                                /*if ($event['banner_url'] != ''){
+                                    $image_cdn = Functions::download_image_to_cdn($event['banner_url'], array('w' => 1200));
+                                    if($image_cdn) {
+                                        if($image_cdn['width'] > 500) {
+                                            $event['banner_url'] = $image_cdn['cdn'];
+                                            Event::update_event_banner($event_id, $event['banner_url']);
+                                            // print_debug("Banner URL", $event['banner_url'], 1);
+                                        } else $event['banner_url'] = '';
+                                    }
+                                }*/
+                                $aesqs->sendMessage(json_encode(array("event"=> $event, "action" => 'IMAGES')));
+
+                                $epsqs->sendMessage(json_encode(array("event_id"=>$event_id, "published_by" => 0)));
+
+                                //add this line for categories extraction
+                                Functions::insert_into_sqs(json_encode(array("event_id"=>$event_id)), SQS::eventProfilingQueue);
+                                sleep(1);
+
+                                if ($event['categories']) {
+                                    $categories = implode(",", $event['categories']);
+                                    Event::update_event_ext_catags($event_id, $categories, $categories);
+                                }else{
+                                     //extract cats,tags with our own algo also
+                                    $extracted_entities = Event::identifyCategories($event['eventname'] . ";" . $event['description']);
+                                    if($extracted_entities) {
+                                        $categories = implode(",", $extracted_entities['categories']);
+                                        $tags = implode(",", $extracted_entities['keywords']);
+                                        Event::update_event_ext_catags($event_id, $categories, $tags);
+                                        // print_debug("Extracted Entities", array($categories, $tags), 1);
+                                    }
+                                }
+
+                                print_debug('Inserted', $event_id, 1, "green");
+                            }
+                            else print_debug('Could not Insert(' . $event['privacy'] . ')' , $event_id, 1, "red");
+
                         }
 
-                        $insertID = Event::insert_event_cron($event);
-
-                        if ($insertID > 0) {
-
+                        if ($action == DB::UPDATE) {
+                            // if($event['thumb_url'] != 'https://cdn.allevents.in/old/default_thumb.png') {
+                            //     $image_cdn = Functions::download_image_to_cdn($event['thumb_url'], array('w' => 300, 'h' => 300));
+                            //     if($image_cdn) {
+                            //         $event['thumb_url'] = $image_cdn['cdn'];
+                            //     }
+                            // }
+                            Event::update_event_cron($event);
+                            //if($event['ticket_url'] != '')
+                              //  Event::update_event_params($event_id, array("redir_url"=> $event['ticket_url']));
+                            /*if ($event['banner_url'] != ''){
+                                $image_cdn = Functions::download_image_to_cdn($event['banner_url'], array('w' => 1200));
+                                if($image_cdn) {
+                                    if($image_cdn['width'] > 500) {
+                                        $event['banner_url'] = $image_cdn['cdn'];
+                                        Event::update_event_banner($event_id, $event['banner_url']);
+                                        // print_debug("Banner URL", $event['banner_url'], 1);
+                                    } else $event['banner_url'] = '';
+                                }
+                            }*/
                             if ($event['banner_url']) {
-                                Event::update_event_banner_cron($event);
+                               Event::update_event_banner_cron($event);
                             }
+                            $aesqs->sendMessage(json_encode(array("event"=> $event, "action" => 'IMAGES')));
 
                             sleep(2);
-
-                            $updated_event_obj = $event['params'] ?: [];
+                            $updated_event_obj = ($event['params']) ? $event['params']:array();
                             $updated_event_obj['last_updated_from_source'] = time();
                             update_ext_event_params($event_id, $updated_event_obj);
 
-                            $aesqs->sendMessage(json_encode([
-                                "event"  => $event,
-                                "action" => "IMAGES"
-                            ]));
-
-                            $epsqs->sendMessage(json_encode([
-                                "event_id"     => $event_id,
-                                "published_by" => 0
-                            ]));
-
-                            Functions::insert_into_sqs(
-                                json_encode(["event_id" => $event_id]),
-                                SQS::eventProfilingQueue
-                            );
-
+                            if ($event['params']['postponed'] == 1 || $event['params']['cancelled'] == 1) {
+                                $is_spam = Event::mark_as_spam($event_id);
+                                print_debug('Spamed', "-> " . json_encode($event['params'], true), 1, "red");
+                                continue;
+                            }
+                            //add this line for categories extraction
+                            Functions::insert_into_sqs(json_encode(array("event_id"=>$event_id)), SQS::eventProfilingQueue);
                             sleep(1);
-
                             if ($event['categories']) {
                                 $categories = implode(",", $event['categories']);
-                                Event::update_event_ext_catags(
-                                    $event_id,
-                                    $categories,
-                                    $categories
-                                );
-                            } else {
-                                $extracted = Event::identifyCategories(
-                                    $event['eventname'] . ";" . $event['description']
-                                );
-                                if ($extracted) {
-                                    Event::update_event_ext_catags(
-                                        $event_id,
-                                        implode(",", $extracted['categories']),
-                                        implode(",", $extracted['keywords'])
-                                    );
+                                Event::update_event_ext_catags($event_id, $categories, $categories);
+                            }else{
+                                 //extract cats,tags with our own algo also
+                                $extracted_entities = Event::identifyCategories($event['eventname'] . ";" . $event['description']);
+                                if($extracted_entities) {
+                                    $categories = implode(",", $extracted_entities['categories']);
+                                    $tags = implode(",", $extracted_entities['keywords']);
+                                    Event::update_event_ext_catags($event_id, $categories, $tags);
+                                    // print_debug("Extracted Entities", array($categories, $tags), 1);
                                 }
                             }
 
-                            print_debug('Inserted', $event_id, 1, "green");
-
-                        } else {
-                            print_debug(
-                                'Could not Insert (' . $event['privacy'] . ')',
-                                $event_id,
-                                1,
-                                "red"
-                            );
-                        }
-                    }
-
-                    if ($action == DB::UPDATE) {
-
-                        Event::update_event_cron($event);
-
-                        if ($event['banner_url']) {
-                            Event::update_event_banner_cron($event);
+                            print_debug('Updated', $event_id, 1);
                         }
 
-                        $aesqs->sendMessage(json_encode([
-                            "event"  => $event,
-                            "action" => "IMAGES"
-                        ]));
-
-                        sleep(2);
-
-                        $updated_event_obj = $event['params'] ?: [];
-                        $updated_event_obj['last_updated_from_source'] = time();
-                        update_ext_event_params($event_id, $updated_event_obj);
-
-                        if (
-                            $event['params']['postponed'] == 1 ||
-                            $event['params']['cancelled'] == 1
-                        ) {
-                            Event::mark_as_spam($event_id);
-                            continue;
+                        if ($event['performers']) {
+                            $event_performers = array();
+                            $performers = $event['performers'];
+                            $performers_temp = array();
+                            foreach ($performers as $performer) {
+                                if (strtolower($performer['@type']) !== "organization") {
+                                    if(array_key_exists('url', $performer)) unset($performer['url']);
+                                    unset($performer['spotifymp3url']);
+                                    unset($performer['spotifyartisturl']);
+                                    $performers_temp['performers'][] = $performer;
+                                }
+                            }
+                            if ($performers_temp['performers']) {
+                                update_ext_event_params($event_id, $performers_temp);
+                                log_ticket_data($event, 'performers_found_skiddle', json_encode($performers_temp['performers']), $event['ticket_url']);
+                                Functions::slack_push($event_id,'skiddle_event_update','Skiddle performers updated', array("event_id" => $event_id, "ticket_url" => $event['ticket_url'], "ae_url" => "https://allevents.in/e/" . $event_id));
+                            }
+                            print_debug('Updated performers', $event_id, 1);
                         }
 
-                        Functions::insert_into_sqs(
-                            json_encode(["event_id" => $event_id]),
-                            SQS::eventProfilingQueue
-                        );
+                        try {
+                            $ticket_result = fetch_event_deta_from_ticket_url($event);
+                            if ($ticket_result['results']) {
+                                if ($ticket_result['results']['all_json']) {
+                                    $event_schema_value = "";
+                                    if (array_key_exists("type_Event", $ticket_result['results']['all_json'])) {
+                                        $event_schema_value = $ticket_result['results']['all_json']['type_Event'];
+                                    }else{
+                                        $event_schema_array = array("BusinessEvent","ChildrensEvent","ComedyEvent","CourseInstance","DanceEvent","DeliveryEvent","EducationEvent","EventSeries","ExhibitionEvent","Festival","FoodEvent","LiteraryEvent","MusicEvent","PublicationEvent","SaleEvent","ScreeningEvent","SocialEvent","SportsEvent","TheaterEvent","VisualArtsEvent");
+                                        foreach ($ticket_result['results']['all_json'] as $key => $value) {
+                                            if (in_array(substr($key,5), $event_schema_array)) {
+                                                $event_schema_value = $ticket_result['results']['all_json'][$key];
+                                            }
+                                        }
+                                    }
+                                    if ($event_schema_value) {
+                                       extend_ticket_obj($ticket_result['results']['end_url'],$event_schema_value, $event);
+                                    } else{
+                                        log_ticket_data($event, 'skdl-crawled', "", $ticket_result['results']['end_url']);
+                                    }
+                                } else {
+                                    log_ticket_data($event, 'skdl-crawled', "", $ticket_result['results']['end_url']);
+                                }
+                            } else  {
+                                print_debug('Skipped', "No result found", 1, "yellow");
+                                log_ticket_data($event, 'crawled');
+                            }
+                        } catch (Exception $e) {
+                        }
 
-                        print_debug('Updated', $event_id, 1);
                     }
                 }
+                if($result['has_more_events'] == 1) {
+                    $params['offset'] += 100;
+                    continue;
+                }else {
+                    print_debug("Breaking", "No more events", 1);
+                    sleep(2);
+                    break;
+                }
             }
-
-            if ($result['has_more_events'] == 1) {
-                $params['offset'] += 100;
-                continue;
-            }
-
-            print_debug("Breaking", "No more events", 1);
-            sleep(2);
-            break;
+            Configurations::set_value("skiddle.psw", json_encode($psw));
         }
-
-        Configurations::set_value("skiddle.psw", json_encode($psw));
-    }
-
     } catch (Exception $ex) {
         echo "Breaking with Error:" . $ex->getMessage();
         break;
@@ -674,7 +702,7 @@ function array_merge_unique($destination, $source) {
 
 function get_cities($last_city_id) {
     $db = new DB("replica");
-    $sql = "select * from app_cities where id >= :last_city_id and country='United Kingdom' order by id asc";
+    $sql = "select * from app_cities where id >= :last_city_id and country = 'United Kingdom' order by id asc";
     $db->query($sql, array("last_city_id" => $last_city_id));
     $result = $db->fetchList();
     if($result)
@@ -684,7 +712,7 @@ function get_cities($last_city_id) {
 
 function get_last_city_id() {
     $db = new DB("replica");
-    $sql = "select id from app_cities where country='United Kingdom' order by id desc limit 1";
+    $sql = "select id from app_cities where country = 'United Kingdom' order by id desc limit 1";
     $db->query($sql);
     $result = $db->fetchList();
     if($result)
