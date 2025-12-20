@@ -33,49 +33,56 @@ $name = 'Skiddle';
 $affiliate = Affiliates::get_affiliate($name);
 $api_config = Affiliates::$api_config[$name];
 print_debug($name, array("psw" => $psw, "affiliate" => $affiliate, "config" => $api_config), 1);
-$last_city_id_from_db = get_last_city_id();
-print_r(array($last_city_id_from_db[0]['id'],$psw['last_city_id']));
-if ($psw['last_city_id'] >= ($last_city_id_from_db[0]['id'] - 1)) {
-    $psw['last_city_id'] = 0;
-}else{
-    $psw['last_city_id'] = (int) $psw['last_city_id'] + 1;
+
+// For location array (18 locations), reset to 1 if we've completed all locations
+if (!isset($psw['last_city_id']) || $psw['last_city_id'] < 1 || $psw['last_city_id'] > 18) {
+    $psw['last_city_id'] = 1;
+    $psw['last_offset'] = 0;
 }
-// $psw['last_city_id'] = 0;
-echo "-------> last citie id is -> {$psw['last_city_id']} \n";
-$cities = get_cities($psw['last_city_id']);
-print_debug("Cities", count($cities), 1);
+echo "-------> Resuming from location id -> {$psw['last_city_id']} with offset -> {$psw['last_offset']} \n";
+$cities = get_cities(0); // Keep this for compatibility
+print_debug("Total locations to process", 18, 1);
 
 $aesqs = new AESQS(SQS::updateEvents);
 $epsqs = new AESQS(SQS::eventPublishedTrigger);
 
 $script_start_time = time();
 //continuesly reading messages from queue
+$location_array = [
+    ['id' => 1, 'lat' => 50.0000000000, 'long' => -5.5000000000],
+    ['id' => 2, 'lat' => 50.5000000000, 'long' => -4.0000000000],
+    ['id' => 3, 'lat' => 50.8000000000, 'long' => -2.0000000000],
+    ['id' => 4, 'lat' => 51.1000000000, 'long' => 0.5000000000],
+    ['id' => 5, 'lat' => 51.7000000000, 'long' => -4.0000000000],
+    ['id' => 6, 'lat' => 52.0000000000, 'long' => -2.0000000000],
+    ['id' => 7, 'lat' => 52.5000000000, 'long' => 1.0000000000],
+    ['id' => 8, 'lat' => 53.0000000000, 'long' => -4.0000000000],
+    ['id' => 9, 'lat' => 53.3000000000, 'long' => -2.3000000000],
+    ['id' => 10, 'lat' => 53.7000000000, 'long' => -0.5000000000],
+    ['id' => 11, 'lat' => 54.6000000000, 'long' => -6.5000000000],
+    ['id' => 12, 'lat' => 54.8000000000, 'long' => -2.5000000000],
+    ['id' => 13, 'lat' => 55.5000000000, 'long' => -4.5000000000],
+    ['id' => 14, 'lat' => 56.2000000000, 'long' => -3.5000000000],
+    ['id' => 15, 'lat' => 57.2000000000, 'long' => -3.0000000000],
+    ['id' => 16, 'lat' => 57.5000000000, 'long' => -6.5000000000],
+    ['id' => 17, 'lat' => 58.5000000000, 'long' => -4.0000000000],
+    ['id' => 18, 'lat' => 60.3000000000, 'long' => -1.3000000000]
+];
+
 while (true) {
     try {
         if(time() > $script_start_time + MAX_LIFE) throw new Exception("I am too old, killing myself :(", 1);
-        $location_array = [
-            ['id' => 1, 'lat' => 50.0000000000, 'long' => -5.5000000000],
-            ['id' => 2, 'lat' => 50.5000000000, 'long' => -4.0000000000],
-            ['id' => 3, 'lat' => 50.8000000000, 'long' => -2.0000000000],
-            ['id' => 4, 'lat' => 51.1000000000, 'long' => 0.5000000000],
-            ['id' => 5, 'lat' => 51.7000000000, 'long' => -4.0000000000],
-            ['id' => 6, 'lat' => 52.0000000000, 'long' => -2.0000000000],
-            ['id' => 7, 'lat' => 52.5000000000, 'long' => 1.0000000000],
-            ['id' => 8, 'lat' => 53.0000000000, 'long' => -4.0000000000],
-            ['id' => 9, 'lat' => 53.3000000000, 'long' => -2.3000000000],
-            ['id' => 10, 'lat' => 53.7000000000, 'long' => -0.5000000000],
-            ['id' => 11, 'lat' => 54.6000000000, 'long' => -6.5000000000],
-            ['id' => 12, 'lat' => 54.8000000000, 'long' => -2.5000000000],
-            ['id' => 13, 'lat' => 55.5000000000, 'long' => -4.5000000000],
-            ['id' => 14, 'lat' => 56.2000000000, 'long' => -3.5000000000],
-            ['id' => 15, 'lat' => 57.2000000000, 'long' => -3.0000000000],
-            ['id' => 16, 'lat' => 57.5000000000, 'long' => -6.5000000000],
-            ['id' => 17, 'lat' => 58.5000000000, 'long' => -4.0000000000],
-            ['id' => 18, 'lat' => 60.3000000000, 'long' => -1.3000000000]
-        ];
+        $start_found = false;
         foreach ($location_array as $index => $location) {
+            // Skip locations until we find where we left off
+            if (!$start_found) {
+                if ((int)$location['id'] < (int)$psw['last_city_id']) {
+                    continue; // Skip already processed locations
+                }
+                $start_found = true;
+            }
             if(time() > $script_start_time + MAX_LIFE) throw new Exception("I am too old, killing myself :(", 1);
-            print_debug("Processing", $city['city'] . ", " . $city['region_code'] . ", " . $city['country'], 1);
+            print_debug("Processing Location", "ID: {$location['id']} (Latitude: {$location['lat']}, Longitude: {$location['long']})", 1);
 
             $params = array(
                 'latitude' => $location['lat'],
@@ -101,7 +108,7 @@ while (true) {
 
                 $events = $result['events'];
 
-                print_debug("{$city['city']} ({$params['offset']})", count($events), 1);
+                print_debug("Location {$location['id']}", "Offset ({$params['offset']}) -> " . count($events) . " events", 1);
                 if(is_array($events) && count($events) > 0) {
                     foreach ($events as $obj) {
                         // echo json_encode($obj);
@@ -285,15 +292,26 @@ while (true) {
                     $params['offset'] += 100;
                     continue;
                 }else {
-                    print_debug("Breaking", "No more events", 1);
+                    print_debug("Completed Location", "{$location['id']} - Moving to next location", 1);
+                    $psw['last_offset'] = 0;
                     sleep(2);
                     break;
                 }
             }
             Configurations::set_value("skiddle.psw", json_encode($psw));
         }
+        
+        // If we completed all locations in this run, reset to start from location 1 next time
+        if ($start_found) {
+            print_debug("Cycle Complete", "Will restart from location 1 on next run", 1);
+            $psw['last_city_id'] = 0; // This will make it start from 1 next time
+            $psw['last_offset'] = 0;
+            Configurations::set_value("skiddle.psw", json_encode($psw));
+        }
+        
     } catch (Exception $ex) {
-        echo "Breaking with Error:" . $ex->getMessage();
+        echo "Breaking with Error:" . $ex->getMessage() . "\n";
+        print_debug("Stopped at", "Location ID: {$psw['last_city_id']}, Offset: {$psw['last_offset']}", 1);
         break;
     }
 }
