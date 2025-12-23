@@ -199,58 +199,27 @@ class EventBriteCore {
                 extraHTTPHeaders: {
                     'Accept-Language': 'en-US,en;q=0.9',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                    'Accept-Encoding': 'gzip, deflate, br',
                     'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                    'Sec-Ch-Ua-Mobile': '?0',
-                    'Sec-Ch-Ua-Platform': '"Windows"',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'none',
-                    'Sec-Fetch-User': '?1'
+                    'Upgrade-Insecure-Requests': '1'
                 },
                 locale: 'en-US',
                 timezoneId: 'America/New_York',
-                permissions: [],
                 args: [
-                    // Extension (keep if you really need it)
                     `--disable-extensions-except=${this.extPath}`,
                     `--load-extension=${this.extPath}`,
-                  
-                    // REQUIRED on most cloud servers
+
+                    '--disable-blink-features=AutomationControlled',
+                    '--start-maximized',
+                    '--disable-infobars',
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
-                  
-                    // Reduce detection (optional)
-                    '--disable-blink-features=AutomationControlled',
-                  
-                    // Stability on Linux servers
-                    '--disable-dev-shm-usage',
-                  
-                    // Additional stealth
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--lang=en-US,en',
                     '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process,VizDisplayCompositor',
-                    '--disable-background-networking',
-                    '--disable-background-timer-throttling',
-                    '--disable-backgrounding-occluded-windows',
-                    '--disable-renderer-backgrounding',
-                    '--disable-hang-monitor',
-                    '--disable-ipc-flooding-protection',
-                    '--disable-client-side-phishing-detection',
-                    '--disable-popup-blocking',
-                    '--disable-prompt-on-repost',
-                    '--metrics-recording-only',
-                    '--no-first-run',
-                    '--safebrowsing-disable-auto-update',
-                    '--enable-features=NetworkService,NetworkServiceInProcess',
-                    '--force-color-profile=srgb',
-                    '--hide-scrollbars',
-                    '--mute-audio',
-                ],                  
+                    '--disable-gpu',
+                    '--disable-dev-shm-usage'
+                ],
                 viewport: { width: 1920, height: 1080 },
-                javaScriptEnabled: true,
-                bypassCSP: true,
             });
 
             // ON close handler for unexpected browser exits
@@ -298,55 +267,14 @@ class EventBriteCore {
         // Bypass webdriver detection
         await this.page.addInitScript(() => {
             Object.defineProperty(navigator, 'webdriver', { get: () => false });
-            
-            // Mock chrome object
-            window.chrome = {
-                runtime: {},
-                loadTimes: function() {},
-                csi: function() {},
-                app: {}
-            };
-            
-            // Mock permissions
-            const originalQuery = window.navigator.permissions.query;
-            window.navigator.permissions.query = (parameters) => (
-                parameters.name === 'notifications' ?
-                    Promise.resolve({ state: Notification.permission }) :
-                    originalQuery(parameters)
-            );
-            
-            // Mock plugins
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
-            });
-            
-            // Mock languages
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['en-US', 'en']
-            });
         });
 
         try {
             await this.page.goto(url, {
-                waitUntil: "networkidle",
-                timeout: 30000
+                waitUntil: "domcontentloaded"
             });
 
             logger.info(`NEW URL OPENED - ${url}`);
-            
-            // Log page HTML content for debugging
-            const page_html = await this.page.content();
-            logger.info(`Page HTML length: ${page_html.length} characters`);
-            logger.info(`Page HTML content: ${page_html}`);
-            
-            await this.randomDelay('M', "after page load to let JS execute");
-            
-            // Scroll to trigger lazy loading
-            await this.page.evaluate(() => {
-                window.scrollTo(0, document.body.scrollHeight / 2);
-            });
-            await this.randomDelay('S', "after scroll to trigger lazy load");
-            
         } catch (error) {
             logger.error(`NEW_PAGE_OPEN_ERROR: ${error.message}`);
         }
@@ -355,44 +283,19 @@ class EventBriteCore {
             let sent = false;
             try {
                 await this.randomDelay('S', "waiting for event cards");
-                
-                // Wait longer for content to load with explicit timeout
-                const eventCard = await this.page.waitForSelector('.event-card__horizontal', {
-                    timeout: 20000
-                }).catch(() => null);
-
-                if (!eventCard) {
-                    logger.warn("No event cards found on page - possible bot detection");
-                    
-                    // Debug: Take screenshot and log page content
-                    const screenshot_path = path.join(this.dataFolderPath, `debug_${place}_${slug}_${currentPagination}.png`);
-                    await this.page.screenshot({ path: screenshot_path, fullPage: false }).catch(() => {});
-                    logger.info(`Screenshot saved to ${screenshot_path}`);
-                    
-                    // Log what's actually on the page
-                    const page_title = await this.page.title();
-                    const page_url = this.page.url();
-                    logger.info(`Page title: "${page_title}", URL: ${page_url}`);
-                }
+                const eventCard = await this.page.waitForSelector('.event-card__horizontal').catch(() => null);
 
                 /* wait for this element to appear, indicating the next page button is ready */
-                const horizontal_events = await this.page.waitForSelector(".DiscoverHorizontalEventCard-module__priceWrapper___3rOUY", {
-                    timeout: 15000
-                }).catch(() => false);
-                
+                const horizontal_events = await this.page.waitForSelector(".DiscoverHorizontalEventCard-module__priceWrapper___3rOUY").catch(() => false);
                 if (horizontal_events === false) {
-                    logger.warn("Price wrapper element not found - page may not be fully loaded");
-                    await this.randomDelay("M", "after price element not found - waiting longer");
+                    await this.randomDelay("S", "after price element not found");
                 }
 
                 const event_ids = await this.page.evaluate(() => {
                     const event_ids = new Set();
-                    const atags = document.querySelectorAll("a[href*='/e/']");  
-                    
-                    // Debug logging
-                    console.log(`Found ${atags.length} event links`);
-                    
-                    atags.forEach(atag => { 
+                    const atags = document.querySelectorAll("a[href*='/e/']");
+
+                    atags.forEach(atag => {
                         const url = new URL(atag.href);
                         const match = url.pathname.match(/-(\d+)$/);
 
@@ -409,13 +312,9 @@ class EventBriteCore {
                     }
 
                     return {
-                        event_ids: Array.from(event_ids),
-                        total_links: atags.length,
-                        body_text_length: document.body ? document.body.innerText.length : 0
+                        event_ids: Array.from(event_ids)
                     }
                 });
-                
-                logger.info(`Found ${event_ids.total_links} links, extracted ${event_ids.event_ids.length} valid event IDs, page content length: ${event_ids.body_text_length}`);
 
                 /* SEND to Q */
                 if (event_ids.event_ids.length > 0) {
@@ -427,22 +326,12 @@ class EventBriteCore {
 
                     await this.randomDelay('S', "after event id's sent");
                 } else {
-                    logger.info("Empty array of id's found! Maybe caught as Bot Detection");
-                    
-                    // Debug: Take screenshot and log page content
-                    const screenshot_path = path.join(this.dataFolderPath, `debug_empty_${place}_${slug}_${currentPagination}.png`);
-                    await this.page.screenshot({ path: screenshot_path, fullPage: false }).catch(() => {});
-                    logger.info(`Screenshot saved to ${screenshot_path}`);
-                    
-                    // Log what's actually on the page
-                    const page_title = await this.page.title();
-                    const page_url = this.page.url();
-                    logger.info(`Page title: "${page_title}", URL: ${page_url}`);
+                    logger.info("Empty array of id's found!");
                 }
 
                 let nextPageButton = this.page.getByTestId('page-next');
 
-                if (await nextPageButton.isVisible() || event_ids.event_ids.length) {
+                if (await nextPageButton.isVisible() || event_ids.length) {
                     currentPagination++;
                     await pageStateCallback(currentPagination);
                     logger.info("Clicking next button!");

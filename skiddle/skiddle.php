@@ -49,24 +49,24 @@ $epsqs = new AESQS(SQS::eventPublishedTrigger);
 $script_start_time = time();
 //continuesly reading messages from queue
 $location_array = [
-    ['id' => 1, 'lat' => 50.0000000000, 'long' => -5.5000000000],
-    ['id' => 2, 'lat' => 50.5000000000, 'long' => -4.0000000000],
-    ['id' => 3, 'lat' => 50.8000000000, 'long' => -2.0000000000],
-    ['id' => 4, 'lat' => 51.1000000000, 'long' => 0.5000000000],
-    ['id' => 5, 'lat' => 51.7000000000, 'long' => -4.0000000000],
-    ['id' => 6, 'lat' => 52.0000000000, 'long' => -2.0000000000],
-    ['id' => 7, 'lat' => 52.5000000000, 'long' => 1.0000000000],
-    ['id' => 8, 'lat' => 53.0000000000, 'long' => -4.0000000000],
-    ['id' => 9, 'lat' => 53.3000000000, 'long' => -2.3000000000],
-    ['id' => 10, 'lat' => 53.7000000000, 'long' => -0.5000000000],
-    ['id' => 11, 'lat' => 54.6000000000, 'long' => -6.5000000000],
-    ['id' => 12, 'lat' => 54.8000000000, 'long' => -2.5000000000],
-    ['id' => 13, 'lat' => 55.5000000000, 'long' => -4.5000000000],
-    ['id' => 14, 'lat' => 56.2000000000, 'long' => -3.5000000000],
-    ['id' => 15, 'lat' => 57.2000000000, 'long' => -3.0000000000],
-    ['id' => 16, 'lat' => 57.5000000000, 'long' => -6.5000000000],
-    ['id' => 17, 'lat' => 58.5000000000, 'long' => -4.0000000000],
-    ['id' => 18, 'lat' => 60.3000000000, 'long' => -1.3000000000]
+    ['id' => 1, 'lat' => 58.5000000000, 'long' => -4.0000000000],
+    ['id' => 2, 'lat' => 60.3000000000, 'long' => -1.3000000000],
+    ['id' => 3, 'lat' => 51.1000000000, 'long' => 0.5000000000],
+    ['id' => 4, 'lat' => 51.7000000000, 'long' => -4.0000000000],
+    ['id' => 5, 'lat' => 52.0000000000, 'long' => -2.0000000000],
+    ['id' => 6, 'lat' => 52.5000000000, 'long' => 1.0000000000],
+    ['id' => 7, 'lat' => 53.0000000000, 'long' => -4.0000000000],
+    ['id' => 8, 'lat' => 53.3000000000, 'long' => -2.3000000000],
+    ['id' => 9, 'lat' => 53.7000000000, 'long' => -0.5000000000],
+    ['id' => 10, 'lat' => 54.6000000000, 'long' => -6.5000000000],
+    ['id' => 11, 'lat' => 54.8000000000, 'long' => -2.5000000000],
+    ['id' => 12, 'lat' => 55.5000000000, 'long' => -4.5000000000],
+    ['id' => 13, 'lat' => 56.2000000000, 'long' => -3.5000000000],
+    ['id' => 14, 'lat' => 57.2000000000, 'long' => -3.0000000000],
+    ['id' => 15, 'lat' => 57.5000000000, 'long' => -6.5000000000],
+    ['id' => 16, 'lat' => 50.8000000000, 'long' => -2.0000000000],
+    ['id' => 17, 'lat' => 50.0000000000, 'long' => -5.5000000000],
+    ['id' => 18, 'lat' => 50.5000000000, 'long' => -4.0000000000]
 ];
 
 while (true) {
@@ -97,7 +97,7 @@ while (true) {
             if((int)$psw['last_city_id'] == (int)$location['id'])
                 $params['offset'] = $psw['last_offset'];
 
-            $psw['last_city_id'] = $location['id'];
+            // Don't update last_city_id here - only update when location is completed
 
             while (true) {
 
@@ -294,17 +294,19 @@ while (true) {
                 }else {
                     print_debug("Completed Location", "{$location['id']} - Moving to next location", 1);
                     $psw['last_offset'] = 0;
+                    // Move to next location (will reset to 1 after foreach completes if needed)
+                    $psw['last_city_id'] = $location['id'] + 1;
+                    Configurations::set_value("skiddle.psw", json_encode($psw));
                     sleep(2);
                     break;
                 }
             }
-            Configurations::set_value("skiddle.psw", json_encode($psw));
         }
         
-        // If we completed all locations in this run, reset to start from location 1 next time
+        // After completing all locations in the foreach, reset to location 1 for next cycle
         if ($start_found) {
-            print_debug("Cycle Complete", "Will restart from location 1 on next run", 1);
-            $psw['last_city_id'] = 0; // This will make it start from 1 next time
+            print_debug("Cycle Complete", "Resetting to location 1 for next cycle", 1);
+            $psw['last_city_id'] = 1;
             $psw['last_offset'] = 0;
             Configurations::set_value("skiddle.psw", json_encode($psw));
         }
@@ -918,6 +920,8 @@ function detect_action($event_id, $event) {
                 return false; //do nothing
             if (strtotime($result['updated_time']) >= strtotime($event['updated_time']))
                 return false; //do nothing
+            else if (strtotime($event['updated_time']) - strtotime($result['updated_time']) < 1296000)
+                return false; //if event is updated less than 15 days ago, then skip
             else
                 return DB::UPDATE;
         }
